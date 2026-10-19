@@ -13,6 +13,7 @@ import ab_client as ab  # noqa: E402
 
 def main(params: dict) -> dict:
     days = ab.int_param(params, "days", 4, 1, 14)
+    ab.ensure_home_delivery()
     result = ab.gql("GetTimeSlotsV2", ab.SLOTS, {"lang": ab.LANG}).get("getTimeSlots") or {}
     out = []
     for day in (result.get("slots") or [])[:days]:
@@ -25,7 +26,7 @@ def main(params: dict) -> dict:
                 "time": s.get("slotTimeRangeFmt"),
                 "order_by": s.get("cutOffTime"),
                 "cost": ((s.get("preparationCost") or {}).get("deliveryCost") or {}).get("formattedValue"),
-                "note": s.get("localizedMessage") or None,
+                "note": (s.get("localizedMessage") or "").strip() or None,
             }
             free.append({key: value for key, value in row.items() if value is not None})
         out.append({"date": day.get("formattedDate") or day.get("date"), "slots": free})

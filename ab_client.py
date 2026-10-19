@@ -13,6 +13,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -34,6 +35,8 @@ LAST_ORDERS_PRODUCTS = "LAST_ORDERS_PRODUCTS"
 AUTH_COOKIES = ("grocery-roatc", "grocery-rortc")
 FINISHED_STATUSES = {"COMPLETED", "DELIVERED", "CANCELLED", "AUTO_CLOSED", "CLOSED"}
 CANCELLED_STATUSES = {"CANCELLED", "AUTO_CLOSED"}
+# Order dates come as local time without a zone, e.g. 19/10/2026 20:38:16.
+STORE_TIMEZONE = ZoneInfo("Europe/Athens")
 
 # The plugin-runner kills a tool after 30 seconds, so give up a bit earlier
 # with a readable error instead.
@@ -122,7 +125,7 @@ def save_cookies() -> None:
         save_config({"session_cookies": cookies, "cookie_digest": digest(pasted)})
 
 
-def send(body: dict) -> requests.Response:
+def send(body: dict, extra_headers: dict | None = None) -> requests.Response:
     remaining = DEADLINE_SECONDS - (time.monotonic() - _started)
     if remaining < 1:
         raise ToolError("Ran out of time talking to ab.gr, try again.")
@@ -132,6 +135,7 @@ def send(body: dict) -> requests.Response:
         "Origin": SITE,
         "Referer": SITE + "/",
         "x-apollo-operation-name": body["operationName"],
+        **(extra_headers or {}),
     }
     try:
         return session.request("POST", API_URL, json=body, headers=headers, timeout=min(TIMEOUT, remaining))
@@ -168,7 +172,9 @@ def is_auth_error(response: requests.Response, errors: list) -> bool:
 def refresh() -> None:
     global _refreshed
     _refreshed = True
-    response = send({"operationName": "RefreshCustomerToken", "query": REFRESH, "variables": {}})
+    # The site sends this header when it renews the login cookies.
+    body = {"operationName": "RefreshCustomerToken", "query": REFRESH, "variables": {}}
+    response = send(body, {"x-do-refresh-token": "true"})
     body = json_body(response)
     if body.get("errors") or not response.ok:
         raise ToolError("ab.gr logged the plugin out. " + SETUP_HELP)
@@ -244,7 +250,8 @@ ORDER = (
     "entries{entryNumber quantity product{code name manufacturerName productProposedPackaging price{unit}} "
     "totalPrice{formattedValue value}}}}"
 )
-GET_CART = f"query Cart($lang:String!){{cart(lang:$lang){{{CART}}}}}"
+# The plain cart query returns zero totals until the cart is recalculated, so ask for that.
+GET_CART = f"query getCartForCheckout($lang:String!){{cart:getCartV2(lang:$lang refreshCart:true){{{CART}}}}}"
 UPDATE_CART = (
     "mutation MiniBasketUpdateCartEntryQuantity($lang:String! $entries:[EntryInput!]!)"
     "{cart:updateCartEntryQuantity(entries:$entries lang:$lang){totalQuantity "
@@ -260,6 +267,11 @@ SLOTS = (
     "endTime cutOffTime deliveryType available disabled soonUnavailable localizedMessage "
     "preparationCost{name deliveryCost{formattedValue value}}}}}}"
 )
+SELECT_DELIVERY_MODE = (
+    "mutation SelectDeliveryModeV2($deliveryTypeCode:String! $lang:String!){cart:selectDeliveryModeV2("
+    "deliveryTypeCode:$deliveryTypeCode lang:$lang){dispatchType}}"
+)
+DISPATCH_TYPE = "query Cart($lang:String!){cart(lang:$lang){dispatchType}}"
 SELECT_SLOT = (
     "mutation SelectTimeSlotV2($timeslotId:String! $lang:String!){cart:selectTimeSlotV2(timeslotId:$timeslotId "
     f"lang:$lang){{timeslot{{{TIMESLOT}}}}}}}"
@@ -288,7 +300,7 @@ CANCEL_ORDER = (
 
 def product(item: dict) -> dict:
     price = item.get("price") or {}
-    brand = " ".join(filter(None, [item.get("manufacturerName"), item.get("manufacturerSubBrandName")]))
+    brand = " ".join(n for n in [item.get("manufacturerName"), item.get("manufacturerSubBrandName")] if n and n != "-")
     out = {
         "code": item.get("code"),
         "name": item.get("name"),
@@ -319,7 +331,7 @@ def entry(item: dict) -> dict:
         for key, value in {
             "code": prod.get("code"),
             "name": prod.get("name"),
-            "brand": prod.get("manufacturerName"),
+            "brand": prod.get("manufacturerName") if prod.get("manufacturerName") != "-" else None,
             "package": prod.get("productProposedPackaging"),
             "sold_by": (prod.get("price") or {}).get("unit"),
             "quantity": item.get("quantity"),
@@ -352,8 +364,15 @@ def address(item: dict | None) -> str | None:
     return ", ".join(filter(None, [street, " ".join(filter(None, [item.get("postalCode"), item.get("town")]))])) or None
 
 
+def ensure_home_delivery() -> None:
+    # A fresh cart has no delivery method, and ab.gr lists no slots until it has one.
+    cart = gql("Cart", DISPATCH_TYPE, {"lang": LANG}).get("cart") or {}
+    if cart.get("dispatchType") != "HOME_DELIVERY":
+        gql("SelectDeliveryModeV2", SELECT_DELIVERY_MODE, {"deliveryTypeCode": "HOME_DELIVERY", "lang": LANG})
+
+
 def get_cart() -> dict:
-    return gql("Cart", GET_CART, {"lang": LANG}).get("cart") or {}
+    return gql("getCartForCheckout", GET_CART, {"lang": LANG}).get("cart") or {}
 
 
 def cart_summary(cart: dict) -> dict:
@@ -395,6 +414,11 @@ def parse_date(value) -> datetime | None:
     text = str(value).strip()
     if text.isdigit():
         return parse_date(int(text))
+    for layout in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text, layout).replace(tzinfo=STORE_TIMEZONE)
+        except ValueError:
+            pass
     if len(text) > 5 and text[-5] in "+-" and text[-4:].isdigit():
         text = text[:-2] + ":" + text[-2:]
     try:
@@ -494,8 +518,13 @@ def product_stats(orders: list[dict]) -> dict[str, dict]:
             gaps = [(b - a).days for a, b in zip(dates, dates[1:])]
             result["every_days"] = round(statistics.median(gaps))
             # Due once it has been as long as the usual gap. Needs three purchases, two
-            # are too few to tell a habit from a coincidence.
-            result["due"] = len(dates) >= 3 and result["days_since_last"] >= result["every_days"]
+            # are too few to tell a habit from a coincidence. Past three gaps the user
+            # has most likely stopped buying it, so it's no longer due.
+            regular = len(dates) >= 3
+            since, every = result["days_since_last"], max(result["every_days"], 1)
+            result["due"] = regular and every <= since < 3 * every
+            if regular and since >= 3 * every:
+                result["stopped"] = True
         out[code] = {key: value for key, value in result.items() if value is not None}
     return out
 
@@ -504,14 +533,21 @@ def product_stats(orders: list[dict]) -> dict[str, dict]:
 
 def checkout_state() -> dict:
     """Collect what checkout_preview shows and what place_order checks again."""
-    validation = gql("validateCartBeforeCheckout", VALIDATE).get("result") or {}
-    checkout = (
-        gql("getCheckoutInfo", CHECKOUT, {"lang": LANG, "channel": CHANNEL, "propositionType": PROPOSITION_TYPE}).get(
-            "checkout"
-        )
-        or {}
-    )
     cart = get_cart()
+    if not cart.get("entries"):
+        return {"items": [], "problems": ["The cart is empty."]}
+    # ab.gr reports some unfinished carts, like one without a slot, as errors. Those
+    # become problems in the preview.
+    errors, validation, checkout = [], {}, {}
+    try:
+        validation = gql("validateCartBeforeCheckout", VALIDATE).get("result") or {}
+    except ToolError as error:
+        errors.append(str(error).removeprefix("ab.gr: "))
+    try:
+        variables = {"lang": LANG, "channel": CHANNEL, "propositionType": PROPOSITION_TYPE}
+        checkout = gql("getCheckoutInfo", CHECKOUT, variables).get("checkout") or {}
+    except ToolError as error:
+        errors.append(str(error).removeprefix("ab.gr: "))
     minimum = gql("BasketMinimumAmount", MINIMUM, {"lang": LANG}).get("cart") or {}
     totals = checkout.get("cart") or {}
     methods = ((checkout.get("paymentMethods") or {}).get("paymentMethods")) or []
@@ -523,16 +559,16 @@ def checkout_state() -> dict:
     items = [entry(e) for e in cart.get("entries") or []]
     chosen = slot(totals.get("timeslot") or cart.get("timeslot"))
     total = money(totals.get("totalPriceFinal")) or money(totals.get("totalPrice")) or money(cart.get("totalPrice"))
-    problems = []
-    if not items:
-        problems.append("The cart is empty.")
+    problems = [f"ab.gr: {e}" for e in dict.fromkeys(errors) if "slotNotFound" not in e]
     if validation.get("isValid") is False:
         problems.append(f"ab.gr says the cart isn't ready: {validation.get('reason') or 'no reason given'}.")
     if minimum.get("minimumSpendReached") is False:
         problems.append(f"The cart is below the minimum order of {minimum.get('minimumSpendAmount')}.")
     if not chosen:
         problems.append("No delivery slot is chosen. Use delivery_slots and choose_slot.")
-    if not pay_on_delivery:
+    if chosen and not checkout:
+        problems.append("ab.gr returned no checkout details.")
+    elif checkout and not pay_on_delivery:
         problems.append("ab.gr offers no pay-on-delivery method for this order.")
     fingerprint = json.dumps(
         [

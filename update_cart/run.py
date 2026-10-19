@@ -20,9 +20,12 @@ def main(params: dict) -> dict:
         if not isinstance(item, dict) or not str(item.get("code") or "").strip():
             raise ab.ToolError("Each item needs a code.")
         quantity = item.get("quantity")
+        # ab.gr only takes whole numbers, also for products sold by the kilo.
         if isinstance(quantity, bool) or not isinstance(quantity, (int, float)) or quantity < 0:
-            raise ab.ToolError(f"quantity for {item.get('code')} must be 0 or more.")
-        wanted[str(item["code"]).strip()] = quantity
+            raise ab.ToolError(f"quantity for {item.get('code')} must be a whole number, 0 or more.")
+        if not float(quantity).is_integer():
+            raise ab.ToolError(f"quantity for {item.get('code')} must be a whole number, ab.gr doesn't take fractions.")
+        wanted[str(item["code"]).strip()] = int(quantity)
     current = {}
     for e in ab.get_cart().get("entries") or []:
         code = (e.get("product") or {}).get("code")
@@ -40,9 +43,12 @@ def main(params: dict) -> dict:
     if changes:
         variables = {"lang": ab.LANG, "entries": changes}
         result = ab.gql("MiniBasketUpdateCartEntryQuantity", ab.UPDATE_CART, variables).get("cart") or {}
+        asked = {c["productCode"]: int(c["quantityDelta"]) for c in changes}
         for change in result.get("cartModifications") or []:
             status = str(change.get("statusCode") or "")
-            if status and status.lower() != "success":
+            # ab.gr says quantityamended for an ordinary add, so only a short add is a problem.
+            short = change.get("quantityAdded") != asked.get(change.get("productCode"))
+            if status and status.lower() != "success" and short:
                 problems.append(
                     {"code": change.get("productCode"), "status": status, "quantity_added": change.get("quantityAdded")}
                 )

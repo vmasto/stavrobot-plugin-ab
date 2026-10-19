@@ -1,6 +1,6 @@
 {
   "name": "delivery_slots",
-  "description": "List free ab.gr home delivery slots for the cart's delivery address.",
+  "description": "List free ab.gr home delivery slots for the cart's delivery address. Sets the cart to home delivery if it has no delivery method yet.",
   "entrypoint": "run.py",
   "parameters": {
     "days": {

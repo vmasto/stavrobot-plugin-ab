@@ -1,6 +1,6 @@
 {
   "name": "purchase_history",
-  "description": "What the user buys and how often, from their past ab.gr orders: times bought, last bought, usual quantity and the usual gap in days (every_days). due is true when a regular item has gone longer than usual without being bought; use it to remind the user of things they may have forgotten.",
+  "description": "What the user buys and how often, from their past ab.gr orders: times bought, last bought, usual quantity and the usual gap in days (every_days). due is true when a regular item has gone longer than usual without being bought; use it to remind the user of things they may have forgotten. stopped is true when it has been more than three usual gaps, so the user probably stopped buying it.",
   "entrypoint": "run.py",
   "parameters": {
     "query": {

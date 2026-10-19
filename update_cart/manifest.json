@@ -1,6 +1,6 @@
 {
   "name": "update_cart",
-  "description": "Set the quantity of one or more products in the ab.gr cart. quantity is the total wanted, not an amount to add, and 0 removes the product. For products sold by the kilo, check sold_by and the cart afterwards.",
+  "description": "Set the quantity of one or more products in the ab.gr cart. quantity is the total wanted, not an amount to add, and 0 removes the product. Quantities are whole numbers. For products sold by the kilo (sold_by kg), check the cart afterwards to see what one unit means.",
   "entrypoint": "run.py",
   "parameters": {
     "items": {

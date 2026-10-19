@@ -54,7 +54,7 @@ def fake(tmp_path, monkeypatch):
         assert method == "POST" and url == ab.API_URL
         assert 0 < kwargs["timeout"] <= ab.TIMEOUT
         body = kwargs["json"]
-        calls.append(body)
+        calls.append({**body, "headers": kwargs["headers"]})
         handler = routes[body["operationName"]]
         result = handler(body["variables"]) if callable(handler) else handler
         return result if isinstance(result, Response) else Response(200, {"data": result})
@@ -113,15 +113,16 @@ def test_an_expired_login_is_refreshed_once_and_retried(fake):
             {"cart": {"entries": [], "totalPrice": {"formattedValue": "€0,00"}}},
         ]
     )
-    fake.routes["Cart"] = lambda variables: next(answers)
+    fake.routes["getCartForCheckout"] = lambda variables: next(answers)
     fake.routes["RefreshCustomerToken"] = {"refreshCustomerAuthCookies": True}
     out = tool("cart")({})
     assert out["total"] == "€0,00"
-    assert ops(fake) == ["Cart", "RefreshCustomerToken", "Cart"]
+    assert ops(fake) == ["getCartForCheckout", "RefreshCustomerToken", "getCartForCheckout"]
+    assert fake.calls[1]["headers"]["x-do-refresh-token"] == "true"
 
 
 def test_a_failed_refresh_asks_for_a_new_cookie(fake):
-    fake.routes["Cart"] = Response(401, {"errors": [{"message": "Unauthorized"}]})
+    fake.routes["getCartForCheckout"] = Response(401, {"errors": [{"message": "Unauthorized"}]})
     fake.routes["RefreshCustomerToken"] = Response(200, {"errors": [{"message": "TOKEN_REVOKED"}]})
     with pytest.raises(ab.ToolError, match="logged the plugin out"):
         tool("cart")({})
@@ -134,7 +135,7 @@ def test_update_cart_sends_differences_and_removes_zeroes(fake):
             {"cart": {"entries": [cart_entry("A", 5), cart_entry("B", 1)], "totalPrice": {"formattedValue": "€9,00"}}},
         ]
     )
-    fake.routes["Cart"] = lambda variables: next(carts)
+    fake.routes["getCartForCheckout"] = lambda variables: next(carts)
     fake.routes["DeleteItem"] = {"cart": {"totalUnitCount": 2}}
     fake.routes["MiniBasketUpdateCartEntryQuantity"] = {
         "cart": {"cartModifications": [{"productCode": "B", "statusCode": "success"}]}
@@ -153,7 +154,7 @@ def test_update_cart_sends_differences_and_removes_zeroes(fake):
 
 
 def test_update_cart_reports_items_the_store_refused(fake):
-    fake.routes["Cart"] = {"cart": {"entries": []}}
+    fake.routes["getCartForCheckout"] = {"cart": {"entries": []}}
     fake.routes["MiniBasketUpdateCartEntryQuantity"] = {
         "cart": {"cartModifications": [{"productCode": "A", "statusCode": "noStock", "quantityAdded": 0}]}
     }
@@ -198,6 +199,17 @@ def test_purchase_history_counts_regulars_and_flags_due_ones(fake):
     assert [r["code"] for r in tool("purchase_history")({"query": "μπανανα"})["products"]] == ["B1"]
 
 
+def test_items_not_bought_for_three_usual_gaps_are_stopped_not_due(fake):
+    history_routes(fake, [order(f"o{n}", days, [("T1", 1, "Ice tea")]) for n, days in enumerate((80, 87, 94))])
+    row = tool("purchase_history")({})["products"][0]
+    assert row["every_days"] == 7 and row["due"] is False and row["stopped"] is True
+
+
+def test_order_dates_in_the_sites_local_format_are_read():
+    parsed = ab.parse_date("19/10/2026 20:38:16")
+    assert parsed.isoformat() == "2026-10-19T20:38:16+03:00"
+
+
 def test_finished_orders_are_cached_and_open_ones_fetched_again(fake):
     history_routes(fake, [order("open", 1, [("A", 1, "x")], status="CREATED"), order("done", 9, [("A", 1, "x")])])
     tool("purchase_history")({})
@@ -230,7 +242,7 @@ def checkout_routes(fake, slot=True, valid=True):
     timeslot = {"slotCode": "S1", "dateFmt": "Τετ 21/10", "slotTimeRangeFmt": "10:00 - 12:00"} if slot else None
     fake.routes["validateCartBeforeCheckout"] = {"result": {"isValid": valid, "reason": None if valid else "x"}}
     fake.routes["BasketMinimumAmount"] = {"cart": {"minimumSpendReached": True}}
-    fake.routes["Cart"] = {"cart": {"guid": "g1", "entries": [cart_entry("A", 2)], "timeslot": timeslot}}
+    fake.routes["getCartForCheckout"] = {"cart": {"guid": "g1", "entries": [cart_entry("A", 2)], "timeslot": timeslot}}
     fake.routes["getCheckoutInfo"] = {
         "checkout": {
             "paymentMethods": {
