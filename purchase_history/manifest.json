@@ -1,0 +1,23 @@
+{
+  "name": "purchase_history",
+  "description": "What the user buys and how often, from their past ab.gr orders: times bought, last bought, usual quantity and the usual gap in days (every_days). due is true when a regular item has gone longer than usual without being bought; use it to remind the user of things they may have forgotten.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Optional words to filter products by, in Greek."
+    },
+    "months": {
+      "type": "integer",
+      "description": "How far back to look, 1 to 24. Default 6."
+    },
+    "due_only": {
+      "type": "boolean",
+      "description": "Only list regular items that are due. Default false."
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "1 to 300. Default 100."
+    }
+  }
+}

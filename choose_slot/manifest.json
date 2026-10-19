@@ -1,0 +1,11 @@
+{
+  "name": "choose_slot",
+  "description": "Reserve an ab.gr delivery slot for the cart. The reservation expires after a while if no order is placed.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "slot_code": {
+      "type": "string",
+      "description": "slot_code from delivery_slots."
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "ab",
+  "description": "Shop for groceries at AB Vassilopoulos (ab.gr): find the products the user usually buys, fill the cart, book a delivery slot and place pay-on-delivery orders.",
+  "summary": "Order groceries from AB Vassilopoulos (ab.gr)",
+  "instructions": "WARNING: place_order is on by default, so I can place real orders on your ab.gr account, paid on delivery. I'll only order after showing you a preview and getting a yes, but if you'd rather order yourself, turn it off: open /settings/plugins, pick ab, set \"Agents can use\" to \"Selected tools\", click \"Select all\", untick place_order and click \"Save permissions\".\n\nSetup: ab.gr's login needs a captcha, so I can't log in myself. Log in at https://www.ab.gr in a desktop browser, open the developer tools on the Network tab, click any request to www.ab.gr/api/v1/ and copy the value of its Cookie request header. Paste it into the cookie setting on /settings/plugins, not into the chat: it gives full access to your ab.gr account. I keep the login fresh from then on. If ab.gr logs me out, paste a new cookie the same way.\n\nThen ask me to load your purchase history once, so I learn what you usually buy.",
+  "config": {
+    "cookie": {
+      "description": "The Cookie request header of a logged-in ab.gr browser session. Set it on /settings/plugins, not in the chat.",
+      "required": true
+    }
+  }
+}

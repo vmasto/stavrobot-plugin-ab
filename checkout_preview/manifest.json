@@ -1,0 +1,6 @@
+{
+  "name": "checkout_preview",
+  "description": "Show what an ab.gr order would be: items, fees, total, delivery slot, address and the pay-on-delivery methods, plus a confirmation code. Before place_order, send the user this preview and wait for a clear yes in the chat.",
+  "entrypoint": "run.py",
+  "parameters": {}
+}

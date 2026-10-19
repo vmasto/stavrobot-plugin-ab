@@ -1,0 +1,15 @@
+{
+  "name": "orders",
+  "description": "List recent ab.gr orders, or show the items of one order with order_code.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "order_code": {
+      "type": "string",
+      "description": "An order code from the list, to see its items."
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "1 to 50. Default 10."
+    }
+  }
+}

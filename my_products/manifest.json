@@ -1,0 +1,15 @@
+{
+  "name": "my_products",
+  "description": "Products the user bought in recent orders, the same list as the quick shop page on ab.gr. Use it to turn a vague request like 'bananas' into the exact product the user buys: search in Greek and prefer the product bought most often. Products include times_bought, last_bought and every_days once purchase_history has loaded past orders.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Optional words to filter by, in Greek. Leave it out to list everything."
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "1 to 200. Default 50."
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "search",
+  "description": "Search the ab.gr catalog. Product names are in Greek, so search in Greek. For something the user buys regularly, use my_products first to get the exact product they usually buy.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "What to look for, in Greek, e.g. μπανάνες or φέτα."
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "1 to 50. Default 10."
+    },
+    "page": {
+      "type": "integer",
+      "description": "Page number, starting at 0. Default 0."
+    }
+  }
+}

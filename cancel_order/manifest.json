@@ -1,0 +1,11 @@
+{
+  "name": "cancel_order",
+  "description": "Cancel an ab.gr order that hasn't been prepared yet. Ask the user first.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "order_code": {
+      "type": "string",
+      "description": "The order code."
+    }
+  }
+}

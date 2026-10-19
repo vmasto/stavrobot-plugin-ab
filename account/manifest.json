@@ -1,0 +1,6 @@
+{
+  "name": "account",
+  "description": "Check the ab.gr login and show whose account it is. Run this first if another tool says it isn't logged in.",
+  "entrypoint": "run.py",
+  "parameters": {}
+}

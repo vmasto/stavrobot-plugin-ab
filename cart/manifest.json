@@ -1,0 +1,6 @@
+{
+  "name": "cart",
+  "description": "Show the ab.gr cart: items, quantities, total, delivery slot and address.",
+  "entrypoint": "run.py",
+  "parameters": {}
+}

@@ -1,0 +1,11 @@
+{
+  "name": "delivery_slots",
+  "description": "List free ab.gr home delivery slots for the cart's delivery address.",
+  "entrypoint": "run.py",
+  "parameters": {
+    "days": {
+      "type": "integer",
+      "description": "How many days ahead to list, 1 to 14. Default 4."
+    }
+  }
+}
