@@ -264,8 +264,7 @@ DELETE_ITEM = (
 SLOTS = (
     "query GetTimeSlotsV2($lang:String!){getTimeSlots:getTimeSlotsV2(lang:$lang){slots{date formattedDate "
     "dayUnavailable dayCapacityLimitReached dayTimeSlots{slotCode date dateFmt slotTimeRangeFmt startTime "
-    "endTime cutOffTime deliveryType available disabled soonUnavailable localizedMessage "
-    "preparationCost{name deliveryCost{formattedValue value}}}}}}"
+    "endTime cutOffTime deliveryType available disabled soonUnavailable localizedMessage}}}}"
 )
 SELECT_DELIVERY_MODE = (
     "mutation SelectDeliveryModeV2($deliveryTypeCode:String! $lang:String!){cart:selectDeliveryModeV2("
@@ -348,8 +347,17 @@ def slot(item: dict | None) -> dict | None:
         "slot_code": item.get("slotCode"),
         "date": item.get("dateFmt"),
         "time": item.get("slotTimeRangeFmt"),
-        "order_by": item.get("cutOffTime"),
+        "order_by": cutoff(item.get("cutOffTime")),
     }
+
+
+def cutoff(value: str | None) -> str | None:
+    # Slot times come in UTC, unlike order dates.
+    try:
+        moment = datetime.strptime(value or "", "%d/%m/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return value
+    return moment.astimezone(STORE_TIMEZONE).strftime("%d/%m/%Y %H:%M")
 
 
 def money(price: dict | None) -> str | None:

@@ -210,6 +210,11 @@ def test_order_dates_in_the_sites_local_format_are_read():
     assert parsed.isoformat() == "2026-10-19T20:38:16+03:00"
 
 
+def test_slot_cutoffs_are_converted_from_utc_to_athens_time():
+    assert ab.cutoff("20/10/2026 09:00:00") == "20/10/2026 12:00"
+    assert ab.cutoff("01/12/2026 09:00:00") == "01/12/2026 11:00"
+
+
 def test_finished_orders_are_cached_and_open_ones_fetched_again(fake):
     history_routes(fake, [order("open", 1, [("A", 1, "x")], status="CREATED"), order("done", 9, [("A", 1, "x")])])
     tool("purchase_history")({})

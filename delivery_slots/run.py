@@ -24,8 +24,7 @@ def main(params: dict) -> dict:
             row = {
                 "slot_code": s.get("slotCode"),
                 "time": s.get("slotTimeRangeFmt"),
-                "order_by": s.get("cutOffTime"),
-                "cost": ((s.get("preparationCost") or {}).get("deliveryCost") or {}).get("formattedValue"),
+                "order_by": ab.cutoff(s.get("cutOffTime")),
                 "note": (s.get("localizedMessage") or "").strip() or None,
             }
             free.append({key: value for key, value in row.items() if value is not None})
